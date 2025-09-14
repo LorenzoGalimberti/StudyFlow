@@ -39,3 +39,38 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# Firebase config (IMPORTANTE: mantieni questo privato!)
+src/services/firebase-config.ts
+src/services/firebase-config.js
+
+# Environment variables (Firebase keys, etc.)
+.env
+.env.production
+.env.development
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Additional logs
+*.log
+logs/
+
+# ESLint cache
+.eslintcache
+
+# Coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
