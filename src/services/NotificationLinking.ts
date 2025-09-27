@@ -1,4 +1,4 @@
-// services/NotificationLinking.ts
+// services/NotificationLinking.ts - CON GESTIONE TEST E DEEP LINK
 import * as Notifications from 'expo-notifications';
 import { NavigationContainerRef } from '@react-navigation/native';
 
@@ -55,19 +55,34 @@ export class NotificationLinking {
    * Gestisce le notifiche ricevute quando l'app è in foreground
    */
   private handleNotificationReceived(notification: Notifications.Notification): void {
-    console.log('📱 Notification received in foreground:', notification.request.content.title);
+    const { data } = notification.request.content;
+    const isTest = data?.isTest === true;
+    
+    console.log(`📱 Notification received in foreground: ${notification.request.content.title}`);
+    
+    if (isTest) {
+      console.log('🧪 Test notification received - will redirect on tap');
+    }
     
     // Qui potresti mostrare un banner custom o fare altre azioni
     // Per ora lasciamo che sia il sistema a gestire la visualizzazione
   }
 
   /**
-   * Gestisce il tap dell'utente su una notifica
+   * Gestisce il tap dell'utente su una notifica - CON SUPPORTO TEST
    */
   private handleNotificationResponse(response: Notifications.NotificationResponse): void {
     console.log('👆 User tapped notification');
     
     const { data } = response.notification.request.content;
+    
+    // Log dettagliato per debug
+    console.log('📊 Notification data:', {
+      nozioneId: typeof data?.nozioneId === 'string' ? data.nozioneId.slice(0, 8) + '...' : 'unknown',
+      giorno: data?.giorno,
+      action: data?.action,
+      isTest: data?.isTest
+    });
     
     // Verifica che sia una notifica di ripasso con type safety
     if (
@@ -75,31 +90,57 @@ export class NotificationLinking {
       typeof data?.nozioneId === 'string' && 
       typeof data?.giorno === 'number'
     ) {
-      this.navigateToReview(data.nozioneId, data.giorno);
+      
+      if (data?.isTest === true) {
+        console.log('🧪 Test notification tapped - navigating to review');
+        this.navigateToReview(data.nozioneId, data.giorno, true);
+      } else {
+        console.log('📚 Regular notification tapped - navigating to review');
+        this.navigateToReview(data.nozioneId, data.giorno, false);
+      }
+      
     } else {
       console.warn('⚠️ Invalid notification data:', data);
     }
   }
 
   /**
-   * Naviga alla schermata di ripasso
+   * Naviga alla schermata di ripasso - CON SUPPORTO TEST
    */
-  private navigateToReview(nozioneId: string, giorno: number): void {
+  private navigateToReview(nozioneId: string, giorno: number, isTest: boolean = false): void {
     if (!this.navigationRef?.isReady()) {
       console.warn('⚠️ Navigation not ready, scheduling retry...');
       // Retry dopo un breve delay
-      setTimeout(() => this.navigateToReview(nozioneId, giorno), 500);
+      setTimeout(() => this.navigateToReview(nozioneId, giorno, isTest), 500);
       return;
     }
 
     try {
-      // Naviga alla schermata di ripasso
-      this.navigationRef.navigate('App', {
-        screen: 'Review',
-        params: { nozioneId, giorno }
-      });
+      if (isTest) {
+        // Per il test, naviga alla HomeScreen e poi mostra un alert
+        this.navigationRef.navigate('App', {
+          screen: 'Home'
+        });
+        
+        // Piccolo delay per assicurarsi che la navigazione sia completata
+        setTimeout(() => {
+          console.log('🧪 TEST SUCCESSFUL: Navigation and deep linking working!');
+          console.log(`📍 Test destination: Review screen for nozione ${nozioneId.slice(0, 8)}... giorno ${giorno}`);
+          
+          // Potresti anche mostrare un alert qui se vuoi feedback visivo
+          // Alert.alert('🧪 Test Riuscito!', 'Notifiche e deep linking funzionano correttamente');
+        }, 1000);
+        
+      } else {
+        // Navigazione normale per ripassi reali
+        this.navigationRef.navigate('App', {
+          screen: 'Review',
+          params: { nozioneId, giorno }
+        });
+      }
       
-      console.log(`✅ Navigated to Review: nozione=${nozioneId}, giorno=${giorno}`);
+      console.log(`✅ Navigated to ${isTest ? 'Home (test)' : 'Review'}: nozione=${nozioneId.slice(0, 8)}..., giorno=${giorno}`);
+      
     } catch (error) {
       console.error('❌ Navigation error:', error);
     }
@@ -136,6 +177,6 @@ export class NotificationLinking {
    */
   testNavigation(nozioneId: string, giorno: number): void {
     console.log('🧪 Testing navigation to Review screen...');
-    this.navigateToReview(nozioneId, giorno);
+    this.navigateToReview(nozioneId, giorno, true);
   }
 }

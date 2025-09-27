@@ -99,7 +99,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>StudyFlow</Text>
+            <Text style={styles.title}>RememBro</Text>
             <Text style={styles.subtitle}>
               Accedi per continuare a studiare
             </Text>
@@ -150,10 +150,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
                   disabled={isLoading}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.eyeText}>
-                    {showPassword ? '🙈' : '👁️'}
-                  </Text>
+                  <View style={styles.eyeIcon}>
+                    {showPassword ? (
+                      // Eye open (password visible)
+                      <View style={styles.eyeIconContainer}>
+                        <View style={styles.eyeShape}>
+                          <View style={styles.eyePupil} />
+                        </View>
+                      </View>
+                    ) : (
+                      // Eye closed (password hidden)
+                      <View style={styles.eyeIconContainer}>
+                        <View style={styles.eyeShape}>
+                          <View style={styles.eyePupil} />
+                        </View>
+                        <View style={styles.eyeSlash} />
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
               </View>
               {getFieldError('password') && (
@@ -294,8 +310,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  eyeText: {
-    fontSize: 16,
+  eyeIcon: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeIconContainer: {
+    position: 'relative',
+    width: 20,
+    height: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeShape: {
+    width: 20,
+    height: 12,
+    borderWidth: 1.5,
+    borderColor: '#6B7280',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  eyePupil: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#6B7280',
+  },
+  eyeSlash: {
+    position: 'absolute',
+    width: 22,
+    height: 1.5,
+    backgroundColor: '#6B7280',
+    transform: [{ rotate: '45deg' }],
   },
   errorContainer: {
     marginBottom: 16,

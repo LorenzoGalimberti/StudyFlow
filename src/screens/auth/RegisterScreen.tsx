@@ -82,6 +82,30 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
     return fieldError?.message;
   };
 
+  /**
+   * Renderizza icona occhio minimale
+   */
+  const renderEyeIcon = (isVisible: boolean) => (
+    <View style={styles.eyeIcon}>
+      {isVisible ? (
+        // Eye open (password visible)
+        <View style={styles.eyeIconContainer}>
+          <View style={styles.eyeShape}>
+            <View style={styles.eyePupil} />
+          </View>
+        </View>
+      ) : (
+        // Eye closed (password hidden)
+        <View style={styles.eyeIconContainer}>
+          <View style={styles.eyeShape}>
+            <View style={styles.eyePupil} />
+          </View>
+          <View style={styles.eyeSlash} />
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -145,10 +169,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
                   disabled={isLoading}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.eyeText}>
-                    {showPassword ? '🙈' : '👁️'}
-                  </Text>
+                  {renderEyeIcon(showPassword)}
                 </TouchableOpacity>
               </View>
               {getFieldError('password') && (
@@ -180,10 +203,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                   style={styles.eyeButton}
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                   disabled={isLoading}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.eyeText}>
-                    {showConfirmPassword ? '🙈' : '👁️'}
-                  </Text>
+                  {renderEyeIcon(showConfirmPassword)}
                 </TouchableOpacity>
               </View>
               {getFieldError('confirmPassword') && (
@@ -321,8 +343,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  eyeText: {
-    fontSize: 16,
+  eyeIcon: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeIconContainer: {
+    position: 'relative',
+    width: 20,
+    height: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeShape: {
+    width: 20,
+    height: 12,
+    borderWidth: 1.5,
+    borderColor: '#6B7280',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  eyePupil: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#6B7280',
+  },
+  eyeSlash: {
+    position: 'absolute',
+    width: 22,
+    height: 1.5,
+    backgroundColor: '#6B7280',
+    transform: [{ rotate: '45deg' }],
   },
   passwordHint: {
     fontSize: 12,

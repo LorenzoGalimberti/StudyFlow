@@ -1,6 +1,5 @@
 // services/AuthService.ts
 import { 
-  getAuth, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut,
@@ -8,19 +7,23 @@ import {
   User as FirebaseUser,
   AuthError
 } from 'firebase/auth';
+import { auth } from './firebase'; // Import dell'istanza configurata
 import { User } from '../types';
 
 export class AuthService {
-  private auth = getAuth();
+  private auth = auth; // Usa l'istanza con AsyncStorage configurata
 
   /**
    * Effettua il login con email e password
    */
   async login(email: string, password: string): Promise<User> {
     try {
+      console.log('Attempting login for:', email);
       const userCredential = await signInWithEmailAndPassword(this.auth, email, password);
+      console.log('Login successful for:', userCredential.user.email);
       return this.formatUser(userCredential.user);
     } catch (error) {
+      console.log('Login failed:', error);
       throw this.handleAuthError(error as AuthError);
     }
   }
@@ -30,9 +33,12 @@ export class AuthService {
    */
   async register(email: string, password: string): Promise<User> {
     try {
+      console.log('Attempting registration for:', email);
       const userCredential = await createUserWithEmailAndPassword(this.auth, email, password);
+      console.log('Registration successful for:', userCredential.user.email);
       return this.formatUser(userCredential.user);
     } catch (error) {
+      console.log('Registration failed:', error);
       throw this.handleAuthError(error as AuthError);
     }
   }
@@ -42,8 +48,11 @@ export class AuthService {
    */
   async logout(): Promise<void> {
     try {
+      console.log('Attempting logout');
       await signOut(this.auth);
+      console.log('Logout successful');
     } catch (error) {
+      console.log('Logout failed:', error);
       throw this.handleAuthError(error as AuthError);
     }
   }
@@ -53,6 +62,7 @@ export class AuthService {
    */
   getCurrentUser(): User | null {
     const firebaseUser = this.auth.currentUser;
+    console.log('getCurrentUser called:', firebaseUser ? `User: ${firebaseUser.email}` : 'No user');
     return firebaseUser ? this.formatUser(firebaseUser) : null;
   }
 
@@ -60,7 +70,9 @@ export class AuthService {
    * Ascolta i cambiamenti dello stato di autenticazione
    */
   onAuthStateChange(callback: (user: User | null) => void): () => void {
+    console.log('Setting up auth state listener');
     return onAuthStateChanged(this.auth, (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser ? `User: ${firebaseUser.email}` : 'No user');
       const user = firebaseUser ? this.formatUser(firebaseUser) : null;
       callback(user);
     });
@@ -70,13 +82,16 @@ export class AuthService {
    * Verifica se l'utente è autenticato
    */
   isAuthenticated(): boolean {
-    return this.auth.currentUser !== null;
+    const isAuth = this.auth.currentUser !== null;
+    console.log('isAuthenticated called:', isAuth);
+    return isAuth;
   }
 
   /**
    * Formatta l'utente Firebase nel nostro formato
    */
   private formatUser(firebaseUser: FirebaseUser): User {
+    console.log('Formatting user:', firebaseUser.email);
     return {
       uid: firebaseUser.uid,
       email: firebaseUser.email!,
@@ -120,6 +135,7 @@ export class AuthService {
         message = 'Si è verificato un errore durante l\'autenticazione.';
     }
 
+    console.log('Auth error handled:', error.code, '->', message);
     return new Error(message);
   }
 

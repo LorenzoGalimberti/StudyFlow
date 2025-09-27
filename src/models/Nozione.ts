@@ -1,4 +1,4 @@
-// models/Nozione.ts
+// models/Nozione.ts - CON DEBUG DATE RIPASSI
 import { Nozione, RipassoSchedule, RIPASSO_GIORNI } from '../types';
 import { DatabaseService } from '../services/DatabaseService';
 import { NotificationService } from '../services/NotificationService';
@@ -13,7 +13,7 @@ export class NozioneModel {
   }
 
   /**
-   * Crea una nuova nozione con i ripassi programmati
+   * Crea una nuova nozione con i ripassi programmati - CON DEBUG
    */
   static createNozione(
     domanda: string,
@@ -23,10 +23,16 @@ export class NozioneModel {
     const now = new Date();
     const dataCreazione = now.toISOString();
 
+    console.log('\n🔧 === DEBUG CREAZIONE NOZIONE ===');
+    console.log(`📅 Data/ora creazione: ${now.toLocaleString('it-IT')}`);
+    console.log(`📅 ISO creazione: ${dataCreazione}`);
+
     // Calcola le date dei ripassi
     const ripassi: RipassoSchedule[] = RIPASSO_GIORNI.map(giorno => {
       const dataRipasso = new Date(now);
       dataRipasso.setDate(dataRipasso.getDate() + giorno);
+      
+      console.log(`📊 Giorno ${giorno}: ${dataRipasso.toLocaleString('it-IT')} (${dataRipasso.toISOString()})`);
       
       return {
         giorno,
@@ -34,6 +40,8 @@ export class NozioneModel {
         completato: false,
       };
     });
+
+    console.log('===================================\n');
 
     return {
       domanda,
@@ -130,22 +138,25 @@ export class NozioneModel {
       },
       userId
     );
+
+    // Cancella la notifica specifica per questo ripasso
+    await this.notificationService.updateNotificationsAfterRipasso(nozioneId, giorno);
   }
 
   /**
-   * Recupera le nozioni che hanno ripassi da fare oggi
+   * Recupera le nozioni che hanno ripassi da fare ora - COERENTE CON TUTTO IL SISTEMA
    */
   async getNozioniDaRipassare(userId: string): Promise<Nozione[]> {
     const tutte = await this.getAll(userId);
-    const oggi = new Date();
-    oggi.setHours(23, 59, 59, 999); // Fine giornata per confronto
+    const now = new Date(); // Usa orario preciso corrente invece di fine giornata
 
     return tutte.filter(nozione => {
       return nozione.ripassi.some(ripasso => {
         if (ripasso.completato) return false;
-        
+      
         const dataRipasso = new Date(ripasso.dataRipasso);
-        return dataRipasso <= oggi;
+        // Confronto preciso al millisecondo - coerente con HomeScreen e NotificationService
+        return dataRipasso <= now;
       });
     });
   }

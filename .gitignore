@@ -47,8 +47,8 @@ firestore-debug.log*
 ui-debug.log*
 
 # Firebase config (IMPORTANTE: mantieni questo privato!)
-src/services/firebase-config.ts
-src/services/firebase-config.js
+# src/services/firebase-config.ts
+# src/services/firebase-config.js
 
 # Environment variables (Firebase keys, etc.)
 .env

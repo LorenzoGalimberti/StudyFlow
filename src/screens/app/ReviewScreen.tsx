@@ -1,4 +1,4 @@
-// screens/app/ReviewScreen.tsx
+// screens/app/ReviewScreen.tsx - Updated with native header and fixed navigation
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,24 +10,24 @@ import {
   Alert,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RouteProp } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { NozioneModel } from '../../models/Nozione';
 import { Nozione } from '../../types';
 import { ErrorHandler } from '../../utils/errorHandling';
 import { NotificationService } from '../../services/NotificationService';
+import type { AppStackParamList } from '../../navigation/RootNavigator';
 
-interface ReviewScreenProps {
-  navigation: any;
-  route: {
-    params: {
-      nozioneId: string;
-      giorno: number;
-    };
-  };
-}
+type ReviewScreenNavigationProp = StackNavigationProp<AppStackParamList, 'Review'>;
+type ReviewScreenRouteProp = RouteProp<AppStackParamList, 'Review'>;
 
-export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route }) => {
+interface ReviewScreenProps {}
+
+export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
+  const navigation = useNavigation<ReviewScreenNavigationProp>();
+  const route = useRoute<ReviewScreenRouteProp>();
   const { nozioneId, giorno } = route.params;
   const { user } = useAuth();
   
@@ -36,6 +36,8 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
   const [isReviewing, setIsReviewing] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reviewCompleted, setReviewCompleted] = useState(false);
+  const [allowExit, setAllowExit] = useState(false); // Per evitare il loop infinito
 
   const nozioneModel = new NozioneModel();
   const notificationService = NotificationService.getInstance();
@@ -54,6 +56,64 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
       }).start();
     }
   }, [showAnswer]);
+
+  /**
+   * Gestisce il comportamento del back button
+   */
+  const handleGoBack = () => {
+    Alert.alert(
+      'Annullare Ripasso?',
+      'Il ripasso non verrà segnato come completato.',
+      [
+        { text: 'Continua Ripasso', style: 'cancel' },
+        { 
+          text: 'Annulla', 
+          style: 'destructive',
+          onPress: () => {
+            setAllowExit(true); // Permetti l'uscita
+            // Piccolo delay per permettere al state di aggiornarsi
+            setTimeout(() => navigation.goBack(), 50);
+          }
+        },
+      ]
+    );
+  };
+
+  /**
+   * Configura l'header title dinamico
+   */
+  useEffect(() => {
+    if (nozione) {
+      navigation.setOptions({
+        headerTitle: `Ripasso Giorno ${giorno}`,
+        headerTitleStyle: {
+          fontSize: 18,
+          fontWeight: '600',
+          color: '#1F2937',
+        },
+      });
+    }
+  }, [navigation, giorno, nozione]);
+
+  /**
+   * Gestisce l'evento di back navigation
+   */
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      // Se il ripasso è completato o è permessa l'uscita, procedi normalmente
+      if (reviewCompleted || allowExit) {
+        return;
+      }
+
+      // Previeni l'azione di default
+      e.preventDefault();
+
+      // Mostra il prompt di conferma
+      handleGoBack();
+    });
+
+    return unsubscribe;
+  }, [navigation, reviewCompleted, allowExit]);
 
   /**
    * Carica la nozione da ripassare
@@ -115,6 +175,9 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
       // Aggiorna le notifiche (cancella quella completata)
       await notificationService.updateNotificationsAfterRipasso(nozione.id, giorno);
 
+      // IMPORTANTE: Segna come completato PRIMA dell'alert
+      setReviewCompleted(true);
+
       // Feedback positivo
       const ripassiCompletati = nozione.ripassi.filter(r => r.completato).length + 1;
       const ripassiTotali = nozione.ripassi.length;
@@ -133,28 +196,10 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
     } catch (error) {
       const appError = ErrorHandler.handleFirebaseError(error);
       Alert.alert('Errore', appError.message);
-      ErrorHandler.logError(appError, 'ReviewScreen.completeReview');
+      ErrorHandler.logError(appError, 'ReviewScreen.handleCompleteReview');
     } finally {
       setIsReviewing(false);
     }
-  };
-
-  /**
-   * Gestisce l'annullamento del ripasso
-   */
-  const handleCancel = () => {
-    Alert.alert(
-      'Annullare Ripasso?',
-      'Il ripasso non verrà segnato come completato.',
-      [
-        { text: 'Continua Ripasso', style: 'cancel' },
-        { 
-          text: 'Annulla', 
-          style: 'destructive',
-          onPress: () => navigation.goBack()
-        },
-      ]
-    );
   };
 
   /**
@@ -173,19 +218,19 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
   // Loading state
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text style={styles.loadingText}>Caricamento nozione...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   // Error state
   if (error || !nozione) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorIcon}>⚠️</Text>
           <Text style={styles.errorTitle}>Errore</Text>
@@ -197,37 +242,28 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
             <Text style={styles.backButtonText}>Torna Indietro</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   const progress = getProgress();
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleCancel}>
-          <Text style={styles.cancelButton}>Annulla</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Ripasso Giorno {giorno}</Text>
-          <Text style={styles.progressText}>
-            {progress.current}/{progress.total} ripassi completati
-          </Text>
-        </View>
-        <View style={styles.headerRight} />
-      </View>
-
-      {/* Progress Bar */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <View 
-            style={[
-              styles.progressFill, 
-              { width: `${progress.percentage}%` }
-            ]} 
-          />
+    <View style={styles.container}>
+      {/* Progress Bar - direttamente sotto l'header nativo */}
+      <View style={styles.progressSection}>
+        <Text style={styles.progressText}>
+          {progress.current}/{progress.total} ripassi completati
+        </Text>
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { width: `${progress.percentage}%` }
+              ]} 
+            />
+          </View>
         </View>
       </View>
 
@@ -298,6 +334,9 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
             </View>
           </View>
         )}
+
+        {/* Spacer per il bottom button */}
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       {/* Bottom Actions */}
@@ -316,59 +355,43 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ navigation, route })
           </TouchableOpacity>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F3F4F6',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  // Progress section styles - sostituisce l'header custom
+  progressSection: {
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  cancelButton: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
   progressText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#6B7280',
-    marginTop: 2,
-  },
-  headerRight: {
-    width: 60,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   progressContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    // Rimosso padding extra
   },
   progressBar: {
-    height: 4,
+    height: 6,
     backgroundColor: '#E5E7EB',
-    borderRadius: 2,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#10B981',
+    borderRadius: 3,
   },
   content: {
     flex: 1,
@@ -470,6 +493,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#10B981',
     fontWeight: '600',
+  },
+  bottomSpacer: {
+    height: 20,
   },
   bottomActions: {
     padding: 16,

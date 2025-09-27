@@ -2,6 +2,7 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { LogBox } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 // Firebase initialization
 import './src/services/firebase';
@@ -14,6 +15,18 @@ import { AppNavigationContainer } from './src/navigation/RootNavigator';
 import { NotificationService } from './src/services/NotificationService';
 import { DatabaseService } from './src/services/DatabaseService';
 import { NotificationLinking } from './src/services/NotificationLinking';
+
+// 🔧 CONFIGURAZIONE NOTIFICHE GLOBALE - ESSENZIALE PER APK
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    priority: Notifications.AndroidNotificationPriority.HIGH,
+  }),
+});
 
 export default function App() {
   
@@ -38,15 +51,16 @@ export default function App() {
   const initializeApp = async () => {
     try {
       console.log('🚀 Initializing StudyFlow...');
+      console.log('🕐 Orario dell\'applicazione:', new Date().toLocaleString('it-IT'));
 
       // Initialize notification service
       const notificationService = NotificationService.getInstance();
       const notificationInitialized = await notificationService.initialize();
       
       if (notificationInitialized) {
-        console.log('✅ Notifications initialized');
+        console.log('✅ Notifications initialized successfully');
       } else {
-        console.warn('⚠️ Notifications not available');
+        console.warn('⚠️ Notifications not available - check permissions');
       }
 
       // Initialize notification linking

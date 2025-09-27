@@ -1,4 +1,4 @@
-// services/NotificationService.ts
+// services/NotificationService.ts - CON TEST 30 SECONDI E DEEP LINK
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Nozione, NotificationPayload } from '../types';
@@ -83,7 +83,7 @@ export class NotificationService {
   }
 
   /**
-   * Programma le notifiche per una nozione (inclusa quella di test)
+   * Programma le notifiche per una nozione - CON TEST 30 SECONDI
    */
   async scheduleNotificationsForNozione(nozione: Nozione): Promise<string[]> {
     if (!this.isInitialized) {
@@ -92,23 +92,72 @@ export class NotificationService {
     }
 
     const notificationIds: string[] = [];
+    const now = new Date();
 
     try {
-      // // 1. NOTIFICA DI TEST A 10 SECONDI (per verificare deep linking)
-      // const testNotificationId = await this.scheduleTestNotificationForNozione(nozione);
-      // if (testNotificationId) {
-      //   notificationIds.push(testNotificationId);
-      // }
+      console.log('\n🔍 === DEBUG PROGRAMMAZIONE NOTIFICHE ===');
+      console.log(`📅 Nozione: ${nozione.id.slice(0, 8)}...`);
+      console.log(`📅 Creata: ${new Date(nozione.dataCreazione).toLocaleString('it-IT')}`);
+      console.log(`📅 Ora corrente: ${now.toLocaleString('it-IT')}`);
+      
+      // Verifica permessi
+      const hasPermissions = await this.areNotificationsEnabled();
+      console.log(`🔐 Permessi: ${hasPermissions ? 'CONCESSI' : 'NEGATI'}`);
 
-      // 2. NOTIFICHE NORMALI DI RIPASSO
+      let scheduledCount = 0;
+      let skippedCount = 0;
+
+      // 🧪 NOTIFICA DI TEST A 30 SECONDI - CON DEEP LINK
+      try {
+        const testDate = new Date(now.getTime() + 30000); // 30 secondi da ora
+        
+        const testNotificationId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '🧪 TEST StudyFlow (30sec)',
+            body: `Test immediato: "${this.createNotificationBody(nozione.domanda)}"`,
+            data: {
+              nozioneId: nozione.id,
+              giorno: 0, // Giorno 0 = test
+              action: 'review',
+              isTest: true,
+              testTime: testDate.toISOString()
+            },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: testDate,
+          },
+        });
+
+        notificationIds.push(testNotificationId);
+        console.log(`🧪 TEST NOTIFICA: ID ${testNotificationId.slice(0, 8)}... programmata per ${testDate.toLocaleTimeString('it-IT')}`);
+      } catch (error) {
+        console.log(`💥 ERRORE TEST: ${error}`);
+      }
+
+      // NOTIFICHE DI RIPASSO NORMALI (1, 3, 7, 21 giorni)
       for (const ripasso of nozione.ripassi) {
-        if (ripasso.completato) continue;
+        if (ripasso.completato) {
+          console.log(`⏭️ Saltato giorno ${ripasso.giorno}: già completato`);
+          continue;
+        }
 
         const dataRipasso = new Date(ripasso.dataRipasso);
-        const now = new Date();
+        const diffMs = dataRipasso.getTime() - now.getTime();
+        const diffMinutes = Math.round(diffMs / (1000 * 60));
+        const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+        console.log(`\n📊 Ripasso giorno ${ripasso.giorno}:`);
+        console.log(`   📅 Data: ${dataRipasso.toLocaleString('it-IT')}`);
+        console.log(`   ⏰ Tra: ${diffDays}d ${diffHours}h ${diffMinutes}min`);
 
         // Salta notifiche nel passato
-        if (dataRipasso <= now) continue;
+        if (dataRipasso <= now) {
+          console.log(`   ❌ SALTATO: Nel passato (diff: ${diffMinutes} min)`);
+          skippedCount++;
+          continue;
+        }
 
         const payload: NotificationPayload = {
           nozioneId: nozione.id,
@@ -117,63 +166,48 @@ export class NotificationService {
           body: this.createNotificationBody(nozione.domanda),
         };
 
-        const notificationId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: payload.title,
-            body: payload.body,
-            data: {
-              nozioneId: payload.nozioneId,
-              giorno: payload.giorno,
-              action: 'review',
+        try {
+          const notificationId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: payload.title,
+              body: payload.body,
+              data: {
+                nozioneId: payload.nozioneId,
+                giorno: payload.giorno,
+                action: 'review',
+                isTest: false
+              },
             },
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: dataRipasso,
-          },
-        });
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: dataRipasso,
+            },
+          });
 
-        notificationIds.push(notificationId);
+          notificationIds.push(notificationId);
+          scheduledCount++;
+          console.log(`   ✅ PROGRAMMATA: ID ${notificationId.slice(0, 8)}...`);
+        } catch (error) {
+          console.log(`   💥 ERRORE: ${error}`);
+        }
       }
+
+      // Verifica totale notifiche nel sistema
+      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
+      
+      console.log('\n📊 === RIEPILOGO ===');
+      console.log(`🧪 Test (30sec): 1`);
+      console.log(`✅ Programmate: ${scheduledCount}`);
+      console.log(`❌ Saltate: ${skippedCount}`);
+      console.log(`📋 Totale notifiche sistema: ${allScheduled.length}`);
+      console.log('===============================\n');
 
       return notificationIds;
     } catch (error) {
-      console.error('Errore programmazione notifiche:', error);
+      console.error('💥 Errore programmazione notifiche:', error);
       return [];
     }
   }
-
-  // /**
-  //  * Programma una notifica di test a 10 secondi per verificare il deep linking
-  //  */
-  // private async scheduleTestNotificationForNozione(nozione: Nozione): Promise<string | null> {
-  //   try {
-  //     const testDate = new Date(Date.now() + 10000); // 10 secondi da ora
-      
-  //     const notificationId = await Notifications.scheduleNotificationAsync({
-  //       content: {
-  //         title: '🧪 Nozione Creata!',
-  //         body: `Test deep linking: "${this.createNotificationBody(nozione.domanda)}"`,
-  //         data: {
-  //           nozioneId: nozione.id,
-  //           giorno: 1, // Usa giorno 1 per il test
-  //           action: 'review',
-  //           isTest: true, // Flag per identificare che è un test
-  //         },
-  //       },
-  //       trigger: {
-  //         type: Notifications.SchedulableTriggerInputTypes.DATE,
-  //         date: testDate,
-  //       },
-  //     });
-
-  //     console.log(`🧪 Notifica di test programmata per ${testDate.toLocaleTimeString()}`);
-  //     return notificationId;
-  //   } catch (error) {
-  //     console.error('Errore programmazione notifica di test:', error);
-  //     return null;
-  //   }
-  // }
 
   /**
    * Cancella le notifiche per una nozione specifica
@@ -187,6 +221,8 @@ export class NotificationService {
           notification.content.data?.nozioneId === nozioneId
         )
         .map(notification => notification.identifier);
+
+      console.log(`🧹 Cancellando ${toCancel.length} notifiche per nozione ${nozioneId.slice(0, 8)}...`);
 
       for (const id of toCancel) {
         await Notifications.cancelScheduledNotificationAsync(id);
@@ -214,6 +250,8 @@ export class NotificationService {
         )
         .map(notification => notification.identifier);
 
+      console.log(`🎯 Cancellando notifica giorno ${completedGiorno} per nozione ${nozioneId.slice(0, 8)}...`);
+
       for (const id of toCancelIds) {
         await Notifications.cancelScheduledNotificationAsync(id);
       }
@@ -228,6 +266,7 @@ export class NotificationService {
   async cancelAllNotifications(): Promise<void> {
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('🧹 Tutte le notifiche cancellate');
     } catch (error) {
       console.error('Errore cancellazione tutte notifiche:', error);
     }
@@ -287,7 +326,7 @@ export class NotificationService {
   }
 
   /**
-   * Mostra notifica immediata per test
+   * Mostra notifica immediata per test (solo se necessario)
    */
   async showTestNotification(): Promise<void> {
     if (!this.isInitialized) {
@@ -301,5 +340,31 @@ export class NotificationService {
       },
       trigger: null, // Immediata
     });
+  }
+
+  /**
+   * 📊 Debug info per troubleshooting
+   */
+  async getDebugInfo(): Promise<{
+    permissions: string;
+    scheduledCount: number;
+    initialized: boolean;
+  }> {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      
+      return {
+        permissions: status,
+        scheduledCount: scheduled.length,
+        initialized: this.isInitialized,
+      };
+    } catch (error) {
+      return {
+        permissions: 'error',
+        scheduledCount: 0,
+        initialized: false,
+      };
+    }
   }
 }

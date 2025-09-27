@@ -1,30 +1,56 @@
-// screens/app/AddNotionScreen.tsx
-import React, { useState } from 'react';
+// screens/app/AddNotionScreen.tsx - Fixed beforeRemove conflict
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { NozioneModel } from '../../models/Nozione';
 import { ValidationUtils } from '../../utils/validation';
 import { ValidationError } from '../../types';
 import { ErrorHandler } from '../../utils/errorHandling';
 import { NotificationService } from '../../services/NotificationService';
+import type { AppStackParamList } from '../../navigation/RootNavigator';
 
-interface AddNotionScreenProps {
-  navigation: any;
-}
+type AddNotionNavigationProp = StackNavigationProp<AppStackParamList, 'AddNotion'>;
 
-export const AddNotionScreen: React.FC<AddNotionScreenProps> = ({ navigation }) => {
+interface AddNotionScreenProps {}
+
+/**
+ * Componente per il pulsante Salva nell'header
+ */
+const SaveHeaderButton: React.FC<{
+  onPress: () => void;
+  disabled: boolean;
+  isLoading: boolean;
+}> = ({ onPress, disabled, isLoading }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={disabled}
+    style={[styles.headerSaveButton, disabled && styles.headerSaveButtonDisabled]}
+  >
+    {isLoading ? (
+      <ActivityIndicator size="small" color="#3B82F6" />
+    ) : (
+      <Text style={[styles.headerSaveText, disabled && styles.headerSaveTextDisabled]}>
+        Salva
+      </Text>
+    )}
+  </TouchableOpacity>
+);
+
+export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
+  const navigation = useNavigation<AddNotionNavigationProp>();
   const { user } = useAuth();
   const [domanda, setDomanda] = useState('');
   const [risposta, setRisposta] = useState('');
@@ -70,6 +96,10 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = ({ navigation }) 
         console.log('Notifiche programmate per nozione:', nozioneId);
       }
 
+      // Resetta i campi PRIMA dell'alert per evitare conflitti con beforeRemove
+      setDomanda('');
+      setRisposta('');
+
       // Feedback positivo
       Alert.alert(
         'Nozione Salvata!',
@@ -92,26 +122,62 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = ({ navigation }) 
   };
 
   /**
-   * Gestisce l'annullamento
+   * Controlla se il form è valido
    */
-  const handleCancel = () => {
-    if (domanda.trim() || risposta.trim()) {
+  const isFormValid = () => {
+    return domanda.trim().length > 0 && risposta.trim().length > 0;
+  };
+
+  /**
+   * Configura l'header con il pulsante Salva
+   */
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <SaveHeaderButton
+          onPress={handleSave}
+          disabled={!isFormValid() || isLoading}
+          isLoading={isLoading}
+        />
+      ),
+    });
+  }, [navigation, isFormValid(), isLoading, handleSave]);
+
+  /**
+   * Gestisce l'evento di back navigation
+   */
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      // Se non ci sono modifiche, procedi normalmente
+      if (!domanda.trim() && !risposta.trim()) {
+        return;
+      }
+
+      // Se stiamo salvando, non bloccare la navigazione
+      if (isLoading) {
+        return;
+      }
+
+      // Previeni l'azione di default
+      e.preventDefault();
+
+      // Mostra il prompt di conferma
       Alert.alert(
         'Annullare?',
         'Le modifiche non salvate andranno perse.',
         [
           { text: 'Continua a modificare', style: 'cancel' },
-          { 
-            text: 'Annulla', 
+          {
+            text: 'Annulla',
             style: 'destructive',
-            onPress: () => navigation.goBack() 
+            onPress: () => navigation.dispatch(e.data.action),
           },
         ]
       );
-    } else {
-      navigation.goBack();
-    }
-  };
+    });
+
+    return unsubscribe;
+  }, [navigation, domanda, risposta, isLoading]);
 
   /**
    * Ottiene messaggio di errore per un campo specifico
@@ -130,130 +196,104 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = ({ navigation }) 
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingView}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView 
+        style={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleCancel} disabled={isLoading}>
-            <Text style={styles.cancelButton}>Annulla</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Nuova Nozione</Text>
-          <TouchableOpacity 
-            onPress={handleSave} 
-            disabled={isLoading || !domanda.trim() || !risposta.trim()}
-            style={[
-              styles.saveButton,
-              (!domanda.trim() || !risposta.trim() || isLoading) && styles.saveButtonDisabled
-            ]}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#3B82F6" />
-            ) : (
-              <Text style={styles.saveButtonText}>Salva</Text>
-            )}
-          </TouchableOpacity>
+        {/* Info Box */}
+        <View style={styles.infoBox}>
+          <Text style={styles.infoIcon}>💡</Text>
+          <Text style={styles.infoText}>
+            La tua nozione sarà ripassata automaticamente dopo 1, 3, 7 e 21 giorni per migliorare la memorizzazione.
+          </Text>
         </View>
 
-        <ScrollView 
-          style={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Info Box */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoIcon}>💡</Text>
-            <Text style={styles.infoText}>
-              La tua nozione sarà ripassata automaticamente dopo 1, 3, 7 e 21 giorni per migliorare la memorizzazione.
-            </Text>
-          </View>
-
-          {/* Domanda */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Domanda</Text>
-            <TextInput
-              style={[
-                styles.textInput,
-                styles.questionInput,
-                getFieldError('domanda') && styles.inputError
-              ]}
-              value={domanda}
-              onChangeText={setDomanda}
-              placeholder="Es. Qual è la formula dell'area del cerchio?"
-              placeholderTextColor="#9CA3AF"
-              multiline
-              textAlignVertical="top"
-              maxLength={500}
-              editable={!isLoading}
-            />
-            {getFieldError('domanda') && (
-              <Text style={styles.errorText}>{getFieldError('domanda')}</Text>
-            )}
-            <Text style={styles.charCount}>
-              {getRemainingChars(domanda, 500)}
-            </Text>
-          </View>
-
-          {/* Risposta */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Risposta</Text>
-            <TextInput
-              style={[
-                styles.textInput,
-                styles.answerInput,
-                getFieldError('risposta') && styles.inputError
-              ]}
-              value={risposta}
-              onChangeText={setRisposta}
-              placeholder="Es. A = π × r² dove r è il raggio del cerchio..."
-              placeholderTextColor="#9CA3AF"
-              multiline
-              textAlignVertical="top"
-              maxLength={2000}
-              editable={!isLoading}
-            />
-            {getFieldError('risposta') && (
-              <Text style={styles.errorText}>{getFieldError('risposta')}</Text>
-            )}
-            <Text style={styles.charCount}>
-              {getRemainingChars(risposta, 2000)}
-            </Text>
-          </View>
-
-          {/* Preview */}
-          {domanda.trim() && risposta.trim() && (
-            <View style={styles.previewContainer}>
-              <Text style={styles.previewTitle}>Anteprima Nozione</Text>
-              <View style={styles.previewCard}>
-                <Text style={styles.previewQuestion}>{domanda.trim()}</Text>
-                <View style={styles.previewDivider} />
-                <Text style={styles.previewAnswer}>{risposta.trim()}</Text>
-              </View>
-            </View>
+        {/* Domanda */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Domanda</Text>
+          <TextInput
+            style={[
+              styles.textInput,
+              styles.questionInput,
+              getFieldError('domanda') && styles.inputError
+            ]}
+            value={domanda}
+            onChangeText={setDomanda}
+            placeholder="Es. Qual è la formula dell'area del cerchio?"
+            placeholderTextColor="#9CA3AF"
+            multiline
+            textAlignVertical="top"
+            maxLength={500}
+            editable={!isLoading}
+          />
+          {getFieldError('domanda') && (
+            <Text style={styles.errorText}>{getFieldError('domanda')}</Text>
           )}
+          <Text style={styles.charCount}>
+            {getRemainingChars(domanda, 500)}
+          </Text>
+        </View>
 
-          {/* Schedule Info */}
-          <View style={styles.scheduleContainer}>
-            <Text style={styles.scheduleTitle}>Calendario Ripassi</Text>
-            <View style={styles.scheduleList}>
-              {[1, 3, 7, 21].map((giorno) => (
-                <View key={giorno} style={styles.scheduleItem}>
-                  <View style={styles.scheduleDot} />
-                  <Text style={styles.scheduleText}>
-                    Giorno {giorno}: {getScheduleDate(giorno)}
-                  </Text>
-                </View>
-              ))}
+        {/* Risposta */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Risposta</Text>
+          <TextInput
+            style={[
+              styles.textInput,
+              styles.answerInput,
+              getFieldError('risposta') && styles.inputError
+            ]}
+            value={risposta}
+            onChangeText={setRisposta}
+            placeholder="Es. A = π × r² dove r è il raggio del cerchio..."
+            placeholderTextColor="#9CA3AF"
+            multiline
+            textAlignVertical="top"
+            maxLength={2000}
+            editable={!isLoading}
+          />
+          {getFieldError('risposta') && (
+            <Text style={styles.errorText}>{getFieldError('risposta')}</Text>
+          )}
+          <Text style={styles.charCount}>
+            {getRemainingChars(risposta, 2000)}
+          </Text>
+        </View>
+
+        {/* Preview */}
+        {domanda.trim() && risposta.trim() && (
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewTitle}>Anteprima Nozione</Text>
+            <View style={styles.previewCard}>
+              <Text style={styles.previewQuestion}>{domanda.trim()}</Text>
+              <View style={styles.previewDivider} />
+              <Text style={styles.previewAnswer}>{risposta.trim()}</Text>
             </View>
           </View>
+        )}
 
-          {/* Spacer per il keyboard */}
-          <View style={styles.bottomSpacer} />
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        {/* Schedule Info */}
+        <View style={styles.scheduleContainer}>
+          <Text style={styles.scheduleTitle}>Calendario Ripassi</Text>
+          <View style={styles.scheduleList}>
+            {[1, 3, 7, 21].map((giorno) => (
+              <View key={giorno} style={styles.scheduleItem}>
+                <View style={styles.scheduleDot} />
+                <Text style={styles.scheduleText}>
+                  Giorno {giorno}: {getScheduleDate(giorno)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -273,53 +313,40 @@ const getScheduleDate = (giorni: number): string => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F3F4F6',
   },
-  keyboardAvoidingView: {
+  content: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  scrollContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingVertical: 16,
   },
-  cancelButton: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  saveButton: {
+  // Header button styles
+  headerSaveButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,
+    marginRight: 8,
   },
-  saveButtonDisabled: {
+  headerSaveButtonDisabled: {
     opacity: 0.5,
   },
-  saveButtonText: {
+  headerSaveText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#3B82F6',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
+  headerSaveTextDisabled: {
+    color: '#9CA3AF',
   },
+  // Content styles
   infoBox: {
     flexDirection: 'row',
     backgroundColor: '#EBF8FF',
     padding: 16,
     borderRadius: 12,
-    marginVertical: 16,
+    marginBottom: 24,
   },
   infoIcon: {
     fontSize: 20,
@@ -402,7 +429,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   scheduleContainer: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   scheduleTitle: {
     fontSize: 16,
@@ -430,8 +457,5 @@ const styles = StyleSheet.create({
   scheduleText: {
     fontSize: 14,
     color: '#4B5563',
-  },
-  bottomSpacer: {
-    height: 50,
   },
 });
