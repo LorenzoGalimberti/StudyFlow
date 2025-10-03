@@ -1,4 +1,4 @@
-// screens/app/ReviewScreen.tsx - Updated with native header and fixed navigation
+// screens/app/ReviewScreen.tsx - Con supporto visualizzazione immagini
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -18,6 +19,7 @@ import { NozioneModel } from '../../models/Nozione';
 import { Nozione } from '../../types';
 import { ErrorHandler } from '../../utils/errorHandling';
 import { NotificationService } from '../../services/NotificationService';
+import { ImageService } from '../../services/ImageService';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
 
 type ReviewScreenNavigationProp = StackNavigationProp<AppStackParamList, 'Review'>;
@@ -37,7 +39,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reviewCompleted, setReviewCompleted] = useState(false);
-  const [allowExit, setAllowExit] = useState(false); // Per evitare il loop infinito
+  const [allowExit, setAllowExit] = useState(false);
 
   const nozioneModel = new NozioneModel();
   const notificationService = NotificationService.getInstance();
@@ -70,8 +72,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
           text: 'Annulla', 
           style: 'destructive',
           onPress: () => {
-            setAllowExit(true); // Permetti l'uscita
-            // Piccolo delay per permettere al state di aggiornarsi
+            setAllowExit(true);
             setTimeout(() => navigation.goBack(), 50);
           }
         },
@@ -100,15 +101,11 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
    */
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      // Se il ripasso è completato o è permessa l'uscita, procedi normalmente
       if (reviewCompleted || allowExit) {
         return;
       }
 
-      // Previeni l'azione di default
       e.preventDefault();
-
-      // Mostra il prompt di conferma
       handleGoBack();
     });
 
@@ -134,7 +131,6 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
         return;
       }
 
-      // Verifica che il ripasso sia effettivamente dovuto
       const targetRipasso = loadedNozione.ripassi.find(r => r.giorno === giorno);
       if (!targetRipasso || targetRipasso.completato) {
         setError('Questo ripasso è già stato completato');
@@ -169,16 +165,11 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
     setIsReviewing(true);
 
     try {
-      // Aggiorna il ripasso nel database
       await nozioneModel.completeRipasso(nozione.id, giorno, user.uid);
-
-      // Aggiorna le notifiche (cancella quella completata)
       await notificationService.updateNotificationsAfterRipasso(nozione.id, giorno);
 
-      // IMPORTANTE: Segna come completato PRIMA dell'alert
       setReviewCompleted(true);
 
-      // Feedback positivo
       const ripassiCompletati = nozione.ripassi.filter(r => r.completato).length + 1;
       const ripassiTotali = nozione.ripassi.length;
       
@@ -250,7 +241,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
 
   return (
     <View style={styles.container}>
-      {/* Progress Bar - direttamente sotto l'header nativo */}
+      {/* Progress Bar */}
       <View style={styles.progressSection}>
         <Text style={styles.progressText}>
           {progress.current}/{progress.total} ripassi completati
@@ -278,6 +269,22 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
           </View>
           <Text style={styles.questionText}>{nozione.domanda}</Text>
         </View>
+
+        {/* ⬇️ IMMAGINE (se presente) */}
+        {nozione.imageBase64 && nozione.imageType && (
+          <View style={styles.imageCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Immagine</Text>
+            </View>
+            <Image
+              source={{ 
+                uri: ImageService.getDataUri(nozione.imageBase64, nozione.imageType) 
+              }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+          </View>
+        )}
 
         {/* Show Answer Button */}
         {!showAnswer && (
@@ -335,7 +342,6 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = () => {
           </View>
         )}
 
-        {/* Spacer per il bottom button */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
@@ -364,7 +370,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F6',
   },
-  // Progress section styles - sostituisce l'header custom
   progressSection: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
@@ -380,7 +385,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   progressContainer: {
-    // Rimosso padding extra
   },
   progressBar: {
     height: 6,
@@ -407,6 +411,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  // ⬇️ NUOVO STILE PER CARD IMMAGINE
+  imageCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  image: {
+    width: '100%',
+    height: 250,
+    borderRadius: 8,
   },
   answerCard: {
     backgroundColor: '#FFFFFF',

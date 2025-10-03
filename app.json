@@ -1,25 +1,34 @@
 {
   "expo": {
-    "name": "StudyFlow",
-    "slug": "StudyFlow",
+    "name": "Remembro",
+    "slug": "remembro",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#3B82F6"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kingofthepond.remembro",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Remembro ha bisogno di accedere alla fotocamera per scattare foto delle tue nozioni.",
+        "NSPhotoLibraryUsageDescription": "Remembro ha bisogno di accedere alle tue foto per aggiungere immagini alle nozioni."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#3B82F6"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.kingofthepond.remembro",
@@ -28,32 +37,37 @@
         "android.permission.WAKE_LOCK",
         "android.permission.VIBRATE",
         "android.permission.USE_FULL_SCREEN_INTENT",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo.png"
     },
     "plugins": [
       [
         "expo-notifications",
         {
-          "color": "#2196F3",
+          "color": "#3B82F6",
           "defaultChannel": "default",
           "sounds": []
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Remembro ha bisogno di accedere alle tue foto per aggiungere immagini alle nozioni.",
+          "cameraPermission": "Remembro ha bisogno di accedere alla fotocamera per scattare foto delle nozioni."
         }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "bbe0e57d-763d-4cdb-8064-03da123774a3"
+        "projectId": "6559c7a1-1786-49e9-ac83-8baa7e6e05cb"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/bbe0e57d-763d-4cdb-8064-03da123774a3"
     }
   }
 }

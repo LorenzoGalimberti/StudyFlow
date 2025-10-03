@@ -1,4 +1,4 @@
-// screens/app/AddNotionScreen.tsx - Fixed beforeRemove conflict
+// screens/app/AddNotionScreen.tsx - Con supporto MULTIPLE immagini
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,24 +11,24 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  Image,
+  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { NozioneModel } from '../../models/Nozione';
 import { ValidationUtils } from '../../utils/validation';
-import { ValidationError } from '../../types';
+import { ValidationError, NozioneImage, MAX_IMAGES_PER_NOZIONE } from '../../types';
 import { ErrorHandler } from '../../utils/errorHandling';
 import { NotificationService } from '../../services/NotificationService';
+import { ImageService } from '../../services/ImageService';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
 
 type AddNotionNavigationProp = StackNavigationProp<AppStackParamList, 'AddNotion'>;
 
 interface AddNotionScreenProps {}
 
-/**
- * Componente per il pulsante Salva nell'header
- */
 const SaveHeaderButton: React.FC<{
   onPress: () => void;
   disabled: boolean;
@@ -56,9 +56,109 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
   const [risposta, setRisposta] = useState('');
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 🆕 NUOVI STATI PER MULTIPLE IMMAGINI
+  const [images, setImages] = useState<NozioneImage[]>([]);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
 
   const nozioneModel = new NozioneModel();
   const notificationService = NotificationService.getInstance();
+
+  /**
+   * 🆕 Gestisce la selezione di MULTIPLE immagini dalla galleria
+   */
+  const handlePickMultipleFromGallery = async () => {
+    setIsProcessingImage(true);
+    try {
+      const newImages = await ImageService.pickMultipleFromGallery(images.length);
+      if (newImages.length > 0) {
+        setImages([...images, ...newImages]);
+        console.log(`✅ ${newImages.length} immagini aggiunte dalla galleria`);
+      }
+    } catch (error) {
+      console.error('Errore selezione immagini:', error);
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
+  /**
+   * 🆕 Gestisce lo scatto di una foto
+   */
+  const handleTakePhoto = async () => {
+    setIsProcessingImage(true);
+    try {
+      const newImage = await ImageService.takePhoto(images.length);
+      if (newImage) {
+        setImages([...images, newImage]);
+        console.log('✅ Foto scattata e aggiunta');
+      }
+    } catch (error) {
+      console.error('Errore scatto foto:', error);
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
+  /**
+   * 🆕 Mostra il dialog per aggiungere immagini
+   */
+  const handleAddImages = () => {
+    ImageService.showImagePickerOptions(
+      images.length,
+      handlePickMultipleFromGallery,
+      handleTakePhoto
+    );
+  };
+
+  /**
+   * 🆕 Rimuove una singola immagine
+   */
+  const handleRemoveImage = (imageId: string) => {
+    Alert.alert(
+      'Rimuovere immagine?',
+      'Vuoi rimuovere questa immagine?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Rimuovi',
+          style: 'destructive',
+          onPress: () => {
+            const updatedImages = images
+              .filter(img => img.id !== imageId)
+              .map((img, index) => ({ ...img, order: index }));
+            setImages(updatedImages);
+            console.log('🗑️ Immagine rimossa');
+          },
+        },
+      ]
+    );
+  };
+
+  /**
+   * 🆕 Renderizza una singola immagine nella lista
+   */
+  const renderImageItem = ({ item, index }: { item: NozioneImage; index: number }) => (
+    <View style={styles.imageItem}>
+      <Image
+        source={{ uri: ImageService.getDataUri(item.base64, item.type) }}
+        style={styles.imageThumbnail}
+        resizeMode="cover"
+      />
+      <View style={styles.imageItemOverlay}>
+        <View style={styles.imageNumber}>
+          <Text style={styles.imageNumberText}>{index + 1}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.removeImageIcon}
+          onPress={() => handleRemoveImage(item.id)}
+          disabled={isLoading}
+        >
+          <Text style={styles.removeImageIconText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   /**
    * Gestisce il salvataggio della nozione
@@ -69,7 +169,6 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
       return;
     }
 
-    // Validazione client-side
     const validation = ValidationUtils.validateNozione(domanda.trim(), risposta.trim());
     if (!validation.isValid) {
       setValidationErrors(validation.errors);
@@ -80,30 +179,29 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
     setIsLoading(true);
 
     try {
-      // Crea la nozione
-      const nozioneId = await nozioneModel.create(
+      // 🆕 Crea la nozione con MULTIPLE immagini
+      const nozioneId = await nozioneModel.createWithImages(
         domanda.trim(),
         risposta.trim(),
-        user.uid
+        user.uid,
+        images.length > 0 ? images : undefined
       );
 
-      // Recupera la nozione creata per le notifiche
       const nuovaNozione = await nozioneModel.getById(nozioneId, user.uid);
       
       if (nuovaNozione) {
-        // Programma le notifiche
         await notificationService.scheduleNotificationsForNozione(nuovaNozione);
-        console.log('Notifiche programmate per nozione:', nozioneId);
+        console.log('✅ Notifiche programmate per nozione:', nozioneId);
       }
 
-      // Resetta i campi PRIMA dell'alert per evitare conflitti con beforeRemove
+      // Resetta i campi
       setDomanda('');
       setRisposta('');
+      setImages([]);
 
-      // Feedback positivo
       Alert.alert(
         'Nozione Salvata!',
-        'La tua nozione è stata salvata e i ripassi sono stati programmati.',
+        `La tua nozione è stata salvata${images.length > 0 ? ` con ${images.length} ${images.length === 1 ? 'immagine' : 'immagini'}` : ''} e i ripassi sono stati programmati.`,
         [
           {
             text: 'OK',
@@ -121,47 +219,34 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
     }
   };
 
-  /**
-   * Controlla se il form è valido
-   */
   const isFormValid = () => {
     return domanda.trim().length > 0 && risposta.trim().length > 0;
   };
 
-  /**
-   * Configura l'header con il pulsante Salva
-   */
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <SaveHeaderButton
           onPress={handleSave}
-          disabled={!isFormValid() || isLoading}
+          disabled={!isFormValid() || isLoading || isProcessingImage}
           isLoading={isLoading}
         />
       ),
     });
-  }, [navigation, isFormValid(), isLoading, handleSave]);
+  }, [navigation, isFormValid(), isLoading, isProcessingImage, handleSave]);
 
-  /**
-   * Gestisce l'evento di back navigation
-   */
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      // Se non ci sono modifiche, procedi normalmente
-      if (!domanda.trim() && !risposta.trim()) {
+      if (!domanda.trim() && !risposta.trim() && images.length === 0) {
         return;
       }
 
-      // Se stiamo salvando, non bloccare la navigazione
       if (isLoading) {
         return;
       }
 
-      // Previeni l'azione di default
       e.preventDefault();
 
-      // Mostra il prompt di conferma
       Alert.alert(
         'Annullare?',
         'Le modifiche non salvate andranno perse.',
@@ -177,23 +262,19 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
     });
 
     return unsubscribe;
-  }, [navigation, domanda, risposta, isLoading]);
+  }, [navigation, domanda, risposta, images, isLoading]);
 
-  /**
-   * Ottiene messaggio di errore per un campo specifico
-   */
   const getFieldError = (fieldName: string): string | undefined => {
     const fieldError = validationErrors.find(error => error.field === fieldName);
     return fieldError?.message;
   };
 
-  /**
-   * Conta caratteri rimanenti
-   */
   const getRemainingChars = (text: string, maxLength: number): string => {
     const remaining = maxLength - text.length;
     return `${remaining} caratteri rimanenti`;
   };
+
+  const totalImagesSize = images.length > 0 ? ImageService.getTotalImagesSize(images) : 0;
 
   return (
     <KeyboardAvoidingView
@@ -230,7 +311,7 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
             multiline
             textAlignVertical="top"
             maxLength={500}
-            editable={!isLoading}
+            editable={!isLoading && !isProcessingImage}
           />
           {getFieldError('domanda') && (
             <Text style={styles.errorText}>{getFieldError('domanda')}</Text>
@@ -256,13 +337,72 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
             multiline
             textAlignVertical="top"
             maxLength={2000}
-            editable={!isLoading}
+            editable={!isLoading && !isProcessingImage}
           />
           {getFieldError('risposta') && (
             <Text style={styles.errorText}>{getFieldError('risposta')}</Text>
           )}
           <Text style={styles.charCount}>
             {getRemainingChars(risposta, 2000)}
+          </Text>
+        </View>
+
+        {/* 🆕 SEZIONE MULTIPLE IMMAGINI */}
+        <View style={styles.inputContainer}>
+          <View style={styles.imageHeader}>
+            <Text style={styles.inputLabel}>Immagini (opzionale)</Text>
+            <Text style={styles.imageCounter}>
+              {images.length}/{MAX_IMAGES_PER_NOZIONE}
+            </Text>
+          </View>
+
+          {/* Gallery di immagini */}
+          {images.length > 0 && (
+            <FlatList
+              data={images}
+              renderItem={renderImageItem}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.imagesList}
+              contentContainerStyle={styles.imagesListContent}
+            />
+          )}
+
+          {/* Bottone per aggiungere immagini */}
+          {images.length < MAX_IMAGES_PER_NOZIONE && (
+            <TouchableOpacity
+              style={styles.addImageButton}
+              onPress={handleAddImages}
+              disabled={isProcessingImage || isLoading}
+            >
+              {isProcessingImage ? (
+                <ActivityIndicator color="#3B82F6" />
+              ) : (
+                <>
+                  <Text style={styles.addImageIcon}>📷</Text>
+                  <Text style={styles.addImageText}>
+                    {images.length === 0 ? 'Aggiungi immagini' : 'Aggiungi altre immagini'}
+                  </Text>
+                  <Text style={styles.addImageHint}>
+                    Fotocamera o Galleria (max {MAX_IMAGES_PER_NOZIONE - images.length})
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Info dimensione totale */}
+          {images.length > 0 && (
+            <View style={styles.imageInfo}>
+              <Text style={styles.imageInfoText}>
+                📊 {images.length} {images.length === 1 ? 'immagine' : 'immagini'} • ~{totalImagesSize}KB
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.imageHint}>
+            💡 Puoi aggiungere fino a {MAX_IMAGES_PER_NOZIONE} immagini per aiutarti a ricordare meglio
           </Text>
         </View>
 
@@ -273,6 +413,28 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
             <View style={styles.previewCard}>
               <Text style={styles.previewQuestion}>{domanda.trim()}</Text>
               <View style={styles.previewDivider} />
+              
+              {/* Preview immagini */}
+              {images.length > 0 && (
+                <>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.previewImagesContainer}
+                  >
+                    {images.map((img) => (
+                      <Image
+                        key={img.id}
+                        source={{ uri: ImageService.getDataUri(img.base64, img.type) }}
+                        style={styles.previewImage}
+                        resizeMode="cover"
+                      />
+                    ))}
+                  </ScrollView>
+                  <View style={styles.previewDivider} />
+                </>
+              )}
+              
               <Text style={styles.previewAnswer}>{risposta.trim()}</Text>
             </View>
           </View>
@@ -297,9 +459,6 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
   );
 };
 
-/**
- * Calcola la data del ripasso
- */
 const getScheduleDate = (giorni: number): string => {
   const date = new Date();
   date.setDate(date.getDate() + giorni);
@@ -322,7 +481,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  // Header button styles
   headerSaveButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -340,7 +498,6 @@ const styles = StyleSheet.create({
   headerSaveTextDisabled: {
     color: '#9CA3AF',
   },
-  // Content styles
   infoBox: {
     flexDirection: 'row',
     backgroundColor: '#EBF8FF',
@@ -396,6 +553,112 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 4,
   },
+  // 🆕 NUOVI STILI PER MULTIPLE IMMAGINI
+  imageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  imageCounter: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  imagesList: {
+    marginBottom: 12,
+  },
+  imagesListContent: {
+    gap: 12,
+  },
+  imageItem: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imageThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  imageItemOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'space-between',
+    padding: 8,
+  },
+  imageNumber: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  imageNumberText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  removeImageIcon: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#EF4444',
+    borderRadius: 16,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeImageIconText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  addImageButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  addImageIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  addImageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginBottom: 4,
+  },
+  addImageHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  imageInfo: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  imageInfoText: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  imageHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
   previewContainer: {
     marginBottom: 24,
   },
@@ -422,6 +685,15 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#E5E7EB',
     marginBottom: 12,
+  },
+  previewImagesContainer: {
+    marginBottom: 12,
+  },
+  previewImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 8,
   },
   previewAnswer: {
     fontSize: 14,

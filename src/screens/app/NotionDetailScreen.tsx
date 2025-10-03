@@ -1,4 +1,4 @@
-// screens/app/NotionDetailScreen.tsx - CON DEBUG NOTIFICHE CORRETTI
+// screens/app/NotionDetailScreen.tsx - CON GALLERY MULTIPLE IMMAGINI
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
@@ -15,6 +18,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { NozioneModel } from '../../models/Nozione';
 import { Nozione, RipassoSchedule } from '../../types';
 import { ErrorHandler } from '../../utils/errorHandling';
+import { ImageService } from '../../services/ImageService';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface NotionDetailScreenProps {
   navigation: any;
@@ -35,6 +41,10 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
   const [nozione, setNozione] = useState<Nozione | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Stati per visualizzazione immagine fullscreen
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [isImageModalVisible, setIsImageModalVisible] = useState(false);
 
   const nozioneModel = new NozioneModel();
 
@@ -42,9 +52,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     loadNozione();
   }, []);
 
-  /**
-   * Carica la nozione dal database
-   */
   const loadNozione = async () => {
     if (!user?.uid) {
       setError('Utente non autenticato');
@@ -73,7 +80,37 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
   };
 
   /**
-   * DEBUG: Mostra quando sono programmate le notifiche per questa nozione
+   * Apre l'immagine in fullscreen
+   */
+  const handleImagePress = (index: number) => {
+    setSelectedImageIndex(index);
+    setIsImageModalVisible(true);
+  };
+
+  /**
+   * Naviga all'immagine precedente nel modal
+   */
+  const handlePreviousImage = () => {
+    if (selectedImageIndex === null || !nozione?.images) return;
+    const newIndex = selectedImageIndex > 0 
+      ? selectedImageIndex - 1 
+      : nozione.images.length - 1;
+    setSelectedImageIndex(newIndex);
+  };
+
+  /**
+   * Naviga all'immagine successiva nel modal
+   */
+  const handleNextImage = () => {
+    if (selectedImageIndex === null || !nozione?.images) return;
+    const newIndex = selectedImageIndex < nozione.images.length - 1 
+      ? selectedImageIndex + 1 
+      : 0;
+    setSelectedImageIndex(newIndex);
+  };
+
+  /**
+   * DEBUG: Mostra notifiche programmate
    */
   const debugNotifications = async () => {
     if (!nozione) return;
@@ -103,7 +140,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
       
       console.log('\n📅 DETTAGLI NOTIFICHE:');
       notificationForThisNotion.forEach((notif, notifIndex) => {
-        // FIX: Gestione sicura del trigger
         if (!notif.trigger || typeof notif.trigger !== 'object') {
           console.log(`❌ Trigger non valido per notifica ${notifIndex + 1}`);
           return;
@@ -139,11 +175,10 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
         }
       });
       
-      // FIX: Alert message senza index non utilizzato
       const alertMessage = notificationForThisNotion
         .map((notif) => {
           if (!notif.trigger || typeof notif.trigger !== 'object') {
-            return '❌ Notifica non valida';
+            return null;
           }
 
           const trigger = notif.trigger as any;
@@ -155,7 +190,7 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
             } else if (trigger.value) {
               scheduledDate = new Date(trigger.value);
             } else {
-              return '❌ Data non disponibile';
+              return null;
             }
 
             const giorno = notif.content.data?.giorno;
@@ -167,10 +202,10 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
               return `📅 Giorno ${giorno}: ${scheduledDate.toLocaleDateString('it-IT')} alle ${scheduledDate.toLocaleTimeString('it-IT')}`;
             }
           } catch (error) {
-            return '❌ Errore elaborazione data';
+            return null;
           }
         })
-        .filter(msg => msg !== '❌ Notifica non valida' && msg !== '❌ Data non disponibile' && msg !== '❌ Errore elaborazione data')
+        .filter(msg => msg !== null)
         .join('\n\n');
       
       Alert.alert(
@@ -187,9 +222,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     console.log('===============================\n');
   };
 
-  /**
-   * Calcola lo stato di una nozione
-   */
   const getNozioneStatus = (nozione: Nozione): 'pending' | 'completed' | 'due' => {
     if (nozione.completato) return 'completed';
 
@@ -203,27 +235,17 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     return hasPendingReview ? 'due' : 'pending';
   };
 
-  /**
-   * Calcola la percentuale di progresso
-   */
   const getProgressPercentage = (nozione: Nozione): number => {
     const completedCount = nozione.ripassi.filter(r => r.completato).length;
     const totalCount = nozione.ripassi.length;
     return totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
   };
 
-  /**
-   * Naviga alla schermata di modifica
-   */
   const handleEditNotion = () => {
     if (!nozione) return;
-    
     navigation.navigate('EditNotion', { nozioneId: nozione.id });
   };
 
-  /**
-   * Naviga alla schermata di ripasso
-   */
   const handleStartReview = () => {
     if (!nozione) return;
     
@@ -234,13 +256,11 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     const dataRipasso = new Date(nextRipasso.dataRipasso);
     
     if (dataRipasso <= oggi) {
-      // Ripasso dovuto - vai alla ReviewScreen
       navigation.navigate('Review', {
         nozioneId: nozione.id,
         giorno: nextRipasso.giorno,
       });
     } else {
-      // Ripasso anticipato - mostra conferma
       Alert.alert(
         'Ripasso Anticipato',
         `Questo ripasso è previsto per il ${dataRipasso.toLocaleDateString('it-IT')}. Vuoi farlo comunque ora?`,
@@ -258,9 +278,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     }
   };
 
-  /**
-   * Elimina la nozione con conferma
-   */
   const handleDelete = () => {
     if (!nozione) return;
 
@@ -278,9 +295,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     );
   };
 
-  /**
-   * Conferma l'eliminazione
-   */
   const confirmDelete = async () => {
     if (!nozione || !user?.uid) return;
 
@@ -294,9 +308,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     }
   };
 
-  /**
-   * Ottieni il colore del badge per lo stato
-   */
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
       case 'due':
@@ -309,9 +320,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     }
   };
 
-  /**
-   * Ottieni il testo per lo stato
-   */
   const getStatusText = (status: string) => {
     switch (status) {
       case 'due':
@@ -324,9 +332,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     }
   };
 
-  /**
-   * Renderizza un singolo ripasso
-   */
   const renderRipasso = (ripasso: RipassoSchedule) => {
     const isCompleted = ripasso.completato;
     const isPending = !isCompleted && new Date(ripasso.dataRipasso) <= new Date();
@@ -375,7 +380,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     );
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -387,7 +391,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     );
   }
 
-  // Error state
   if (error || !nozione) {
     return (
       <SafeAreaView style={styles.container}>
@@ -412,22 +415,19 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
   const completedCount = nozione.ripassi.filter(r => r.completato).length;
   const totalCount = nozione.ripassi.length;
   const progressPercentage = getProgressPercentage(nozione);
+  const images = nozione.images || [];
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* PULSANTE DEBUG NOTIFICHE - TEMPORANEO */}
       <TouchableOpacity 
         style={styles.debugButton}
         onPress={debugNotifications}
       >
-        <Text style={styles.debugButtonText}>
-          🔍 NOTIF
-        </Text>
+        <Text style={styles.debugButtonText}>🔍 NOTIF</Text>
       </TouchableOpacity>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         
-        {/* Status Header */}
         <View style={styles.statusHeader}>
           <View style={[styles.statusBadge, { backgroundColor: statusStyle.backgroundColor }]}>
             <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>
@@ -436,7 +436,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
           </View>
         </View>
 
-        {/* Progress Section */}
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressTitle}>Progresso Ripassi</Text>
@@ -445,7 +444,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
             </Text>
           </View>
           
-          {/* Progress Bar Verde */}
           <View style={styles.progressBarContainer}>
             <View style={styles.progressBarBackground}>
               <View 
@@ -461,19 +459,50 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
           </View>
         </View>
 
-        {/* Question Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Domanda</Text>
           <Text style={styles.questionText}>{nozione.domanda}</Text>
         </View>
 
-        {/* Answer Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Risposta</Text>
           <Text style={styles.answerText}>{nozione.risposta}</Text>
         </View>
 
-        {/* Info Card */}
+        {/* GALLERY IMMAGINI */}
+        {images.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.imageHeader}>
+              <Text style={styles.cardTitle}>Immagini</Text>
+              <Text style={styles.imageCount}>{images.length} foto</Text>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.imageGallery}
+              contentContainerStyle={styles.imageGalleryContent}
+            >
+              {images.map((img, index) => (
+                <TouchableOpacity
+                  key={img.id}
+                  onPress={() => handleImagePress(index)}
+                  style={styles.galleryImageContainer}
+                >
+                  <Image
+                    source={{ uri: ImageService.getDataUri(img.base64, img.type) }}
+                    style={styles.galleryImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.imageNumberBadge}>
+                    <Text style={styles.imageNumberBadgeText}>{index + 1}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Informazioni</Text>
           <View style={styles.infoRow}>
@@ -497,7 +526,6 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
           )}
         </View>
 
-        {/* Reviews History */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Cronologia Ripassi</Text>
           <View style={styles.ripassiList}>
@@ -505,46 +533,34 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
           </View>
         </View>
 
-        {/* Bottom Spacing */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Action Buttons */}
       <View style={styles.actionButtons}>
-        {/* Review Button - solo per nozioni "due" */}
         {!nozione.completato && nextRipasso && status === 'due' && (
           <TouchableOpacity
             style={styles.reviewButton}
             onPress={handleStartReview}
           >
-            <Text style={styles.reviewButtonText}>
-              🔔 Ripassa Ora
-            </Text>
+            <Text style={styles.reviewButtonText}>🔔 Ripassa Ora</Text>
           </TouchableOpacity>
         )}
 
-        {/* Edit Button - sempre visibile per nozioni non completate */}
         {!nozione.completato && (
           <TouchableOpacity
             style={styles.editButton}
             onPress={handleEditNotion}
           >
-            <Text style={styles.editButtonText}>
-              ✏️ Modifica Nozione
-            </Text>
+            <Text style={styles.editButtonText}>✏️ Modifica Nozione</Text>
           </TouchableOpacity>
         )}
 
-        {/* Completed Status */}
         {nozione.completato && (
           <View style={styles.completedBanner}>
-            <Text style={styles.completedText}>
-              🎉 Tutti i ripassi completati!
-            </Text>
+            <Text style={styles.completedText}>🎉 Tutti i ripassi completati!</Text>
           </View>
         )}
 
-        {/* Delete Button */}
         <TouchableOpacity
           style={styles.deleteButton}
           onPress={handleDelete}
@@ -552,6 +568,58 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
           <Text style={styles.deleteButtonText}>🗑️ Elimina Nozione</Text>
         </TouchableOpacity>
       </View>
+
+      {/* MODAL FULLSCREEN IMMAGINE */}
+      <Modal
+        visible={isImageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsImageModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              Immagine {selectedImageIndex !== null ? selectedImageIndex + 1 : 0} di {images.length}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setIsImageModalVisible(false)}
+              style={styles.modalCloseButton}
+            >
+              <Text style={styles.modalCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {selectedImageIndex !== null && images[selectedImageIndex] && (
+            <Image
+              source={{ 
+                uri: ImageService.getDataUri(
+                  images[selectedImageIndex].base64, 
+                  images[selectedImageIndex].type
+                ) 
+              }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+          )}
+
+          {images.length > 1 && (
+            <View style={styles.modalNavigation}>
+              <TouchableOpacity
+                onPress={handlePreviousImage}
+                style={styles.modalNavButton}
+              >
+                <Text style={styles.modalNavText}>← Precedente</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleNextImage}
+                style={styles.modalNavButton}
+              >
+                <Text style={styles.modalNavText}>Successiva →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -561,7 +629,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F6',
   },
-  // STILE PULSANTE DEBUG
   debugButton: {
     position: 'absolute',
     top: 20,
@@ -624,8 +691,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
-  // Status Header
   statusHeader: {
     paddingVertical: 16,
     alignItems: 'flex-start',
@@ -639,8 +704,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-
-  // Progress Section
   progressSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -695,8 +758,6 @@ const styles = StyleSheet.create({
     minWidth: 35,
     textAlign: 'right',
   },
-
-  // Cards
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -726,8 +787,49 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     lineHeight: 24,
   },
-
-  // Info
+  imageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  imageCount: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  imageGallery: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  imageGalleryContent: {
+    gap: 12,
+  },
+  galleryImageContainer: {
+    width: 160,
+    height: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  galleryImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageNumberBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.9)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  imageNumberBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -746,8 +848,6 @@ const styles = StyleSheet.create({
     flex: 2,
     textAlign: 'right',
   },
-
-  // Ripassi List
   ripassiList: {
     gap: 12,
   },
@@ -819,8 +919,6 @@ const styles = StyleSheet.create({
     color: '#10B981',
     marginTop: 2,
   },
-
-  // Action Buttons
   actionButtons: {
     padding: 16,
     backgroundColor: '#FFFFFF',
@@ -871,5 +969,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#DC2626',
+  },
+  // MODAL FULLSCREEN STYLES
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 60,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  modalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  modalImage: {
+    flex: 1,
+    width: SCREEN_WIDTH,
+  },
+  modalNavigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalNavButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  modalNavText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
