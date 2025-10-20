@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { NozioneModel } from '../../models/Nozione';
 import { Nozione } from '../../types';
 import { ErrorHandler } from '../../utils/errorHandling';
+import { analyticsService } from '../../services/AnalyticsService';
 
 interface HomeScreenProps {
   navigation: any;
@@ -110,12 +111,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   };
 
   /**
-   * Gestisce l'eliminazione di una nozione
-   */
+ * Gestisce l'eliminazione di una nozione
+ */
   const handleDeleteNozione = async (nozione: Nozione) => {
     if (!user?.uid) return;
 
     try {
+      // 📊 Traccia eliminazione PRIMA di eliminare
+      await analyticsService.trackNozioneDeleted(nozione.id);
+      
       await nozioneModel.delete(nozione.id, user.uid);
       await loadNozioni();
     } catch (error) {

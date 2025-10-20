@@ -24,6 +24,7 @@ import { ErrorHandler } from '../../utils/errorHandling';
 import { NotificationService } from '../../services/NotificationService';
 import { ImageService } from '../../services/ImageService';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
+import { analyticsService } from '../../services/AnalyticsService';
 
 type AddNotionNavigationProp = StackNavigationProp<AppStackParamList, 'AddNotion'>;
 
@@ -185,6 +186,14 @@ export const AddNotionScreen: React.FC<AddNotionScreenProps> = () => {
         risposta.trim(),
         user.uid,
         images.length > 0 ? images : undefined
+      );
+
+      // 📊 Traccia l'evento Analytics con content_length
+      analyticsService.trackNozioneCreated(
+        nozioneId,
+        domanda.trim(),
+        risposta.trim(),
+        images.length > 0
       );
 
       const nuovaNozione = await nozioneModel.getById(nozioneId, user.uid);

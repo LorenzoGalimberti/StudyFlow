@@ -23,7 +23,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Remembro ha bisogno di accedere alla fotocamera per scattare foto delle tue nozioni.",
         "NSPhotoLibraryUsageDescription": "Remembro ha bisogno di accedere alle tue foto per aggiungere immagini alle nozioni."
-      }
+      },
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -42,7 +43,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES"
-      ]
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/logo.png"
@@ -62,7 +64,8 @@
           "photosPermission": "Remembro ha bisogno di accedere alle tue foto per aggiungere immagini alle nozioni.",
           "cameraPermission": "Remembro ha bisogno di accedere alla fotocamera per scattare foto delle nozioni."
         }
-      ]
+      ],
+      "@react-native-firebase/app"
     ],
     "extra": {
       "eas": {

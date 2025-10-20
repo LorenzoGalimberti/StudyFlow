@@ -1,5 +1,6 @@
 // screens/app/NotionDetailScreen.tsx - CON GALLERY MULTIPLE IMMAGINI
 import React, { useState, useEffect } from 'react';
+import { analyticsService } from '../../services/AnalyticsService';
 import {
   View,
   Text,
@@ -299,6 +300,9 @@ export const NotionDetailScreen: React.FC<NotionDetailScreenProps> = ({
     if (!nozione || !user?.uid) return;
 
     try {
+      // 📊 Traccia eliminazione PRIMA di eliminare
+      await analyticsService.trackNozioneDeleted(nozione.id);
+      
       await nozioneModel.delete(nozione.id, user.uid);
       navigation.goBack();
     } catch (error) {
