@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []); // ARRAY VUOTO = ESEGUE UNA SOLA VOLTA
 
   /**
-   * Login semplificato
+   * Login + riprogrammazione notifiche
    */
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -55,9 +55,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('🔑 AuthContext: Starting login...');
       
       await authService.login(email, password);
-      // Lo stato si aggiorna automaticamente tramite onAuthStateChange
       
       console.log('✅ AuthContext: Login completed');
+      
+      // 🔔 RIPROGRAMMA NOTIFICHE DOPO LOGIN
+      try {
+        console.log('🔔 Avvio riprogrammazione notifiche...');
+        
+        // Import dinamico per evitare circular dependency
+        const { NozioneModel } = await import('../models/Nozione');
+        const nozioneModel = new NozioneModel();
+        
+        // Ottieni user corrente
+        const currentUser = authService.getCurrentUser();
+        
+        if (currentUser?.uid) {
+          const result = await nozioneModel.reprogramAllNotifications(currentUser.uid);
+          console.log(`✅ Riprogrammazione completata: ${result.success}/${result.total} nozioni`);
+          
+          if (result.errors > 0) {
+            console.warn(`⚠️ ${result.errors} nozioni con errori`);
+          }
+        } else {
+          console.warn('⚠️ User UID non disponibile');
+        }
+      } catch (notifError) {
+        // NON blocca il login se fallisce
+        console.error('⚠️ Errore riprogrammazione (login OK):', notifError);
+      }
+      
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Errore di login';
@@ -66,7 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return false;
     }
   };
-
+  
   /**
    * Register semplificato
    */

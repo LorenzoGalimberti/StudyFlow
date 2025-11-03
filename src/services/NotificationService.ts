@@ -1,4 +1,4 @@
-// services/NotificationService.ts - CON TEST 30 SECONDI E DEEP LINK
+// services/NotificationService.ts - VERSIONE CORRETTA CON FIX + TEST 30 SECONDI
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Nozione, NotificationPayload } from '../types';
@@ -30,19 +30,22 @@ export class NotificationService {
    */
   async initialize(): Promise<boolean> {
     try {
-      if (this.isInitialized) return true;
+      console.log('🔔 Inizializzazione NotificationService...');
 
       // Richiedi permessi per le notifiche
       const hasPermission = await this.requestPermissions();
       if (!hasPermission) {
-        console.warn('Permessi notifiche non concessi');
+        console.warn('⚠️ Permessi notifiche non concessi');
+        this.isInitialized = false;
         return false;
       }
 
       this.isInitialized = true;
+      console.log('✅ NotificationService inizializzato');
       return true;
     } catch (error) {
-      console.error('Errore inizializzazione notifiche:', error);
+      console.error('❌ Errore inizializzazione notifiche:', error);
+      this.isInitialized = false;
       return false;
     }
   }
@@ -56,8 +59,10 @@ export class NotificationService {
       let finalStatus = existingStatus;
 
       if (existingStatus !== 'granted') {
+        console.log('📱 Richiedendo permessi notifiche...');
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
+        console.log(`📱 Risposta utente: ${finalStatus}`);
       }
 
       if (finalStatus !== 'granted') {
@@ -73,41 +78,76 @@ export class NotificationService {
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
         });
+        console.log('📱 Android notification channel OK');
       }
 
       return true;
     } catch (error) {
-      console.error('Errore richiesta permessi:', error);
+      console.error('❌ Errore richiesta permessi:', error);
       return false;
     }
   }
 
   /**
    * Programma le notifiche per una nozione - CON TEST 30 SECONDI
+   * 
+   * 🔧 FIX APPLICATO: Verifica sempre i permessi prima di programmare
    */
   async scheduleNotificationsForNozione(nozione: Nozione): Promise<string[]> {
-    if (!this.isInitialized) {
+    console.log('\n🔍 === INIZIO PROGRAMMAZIONE NOTIFICHE ===');
+    console.log(`📝 Nozione: ${nozione.domanda.substring(0, 30)}...`);
+    console.log(`🆔 ID: ${nozione.id.slice(0, 8)}...`);
+
+    // ✨ CRITICAL FIX: Verifica SEMPRE i permessi prima di programmare
+    // Questo risolve il bug del primo avvio!
+    console.log('🔐 Verifica permessi...');
+    const hasPermissions = await this.areNotificationsEnabled();
+    console.log(`🔐 Risultato: ${hasPermissions ? '✅ CONCESSI' : '❌ NEGATI'}`);
+
+    if (!hasPermissions) {
+      console.warn('⚠️ Permessi non disponibili, tento reinizializzazione...');
+      
+      // Prova a reinizializzare
       const initialized = await this.initialize();
-      if (!initialized) return [];
+      if (!initialized) {
+        console.error('❌ Reinizializzazione fallita - ABORT');
+        return [];
+      }
+      
+      // Verifica di nuovo dopo reinizializzazione
+      const recheckPermissions = await this.areNotificationsEnabled();
+      console.log(`🔐 Ricontrollo permessi: ${recheckPermissions ? '✅ OK' : '❌ FAIL'}`);
+      
+      if (!recheckPermissions) {
+        console.error('❌ Permessi ancora non disponibili - ABORT');
+        return [];
+      }
+      
+      console.log('✅ Reinizializzazione riuscita!');
+    }
+
+    // Assicurati che il servizio sia inizializzato
+    if (!this.isInitialized) {
+      console.log('🔄 Servizio non inizializzato, inizializzo...');
+      const initialized = await this.initialize();
+      if (!initialized) {
+        console.error('❌ Impossibile inizializzare - ABORT');
+        return [];
+      }
     }
 
     const notificationIds: string[] = [];
     const now = new Date();
 
     try {
-      console.log('\n🔍 === DEBUG PROGRAMMAZIONE NOTIFICHE ===');
-      console.log(`📅 Nozione: ${nozione.id.slice(0, 8)}...`);
-      console.log(`📅 Creata: ${new Date(nozione.dataCreazione).toLocaleString('it-IT')}`);
       console.log(`📅 Ora corrente: ${now.toLocaleString('it-IT')}`);
-      
-      // Verifica permessi
-      const hasPermissions = await this.areNotificationsEnabled();
-      console.log(`🔐 Permessi: ${hasPermissions ? 'CONCESSI' : 'NEGATI'}`);
+      console.log(`📅 Nozione creata: ${new Date(nozione.dataCreazione).toLocaleString('it-IT')}`);
 
       let scheduledCount = 0;
       let skippedCount = 0;
 
       // 🧪 NOTIFICA DI TEST A 30 SECONDI - CON DEEP LINK
+      console.log('\n🧪 Programmando notifica di TEST (30 secondi)...');
       try {
         const testDate = new Date(now.getTime() + 30000); // 30 secondi da ora
         
@@ -130,15 +170,20 @@ export class NotificationService {
         });
 
         notificationIds.push(testNotificationId);
-        console.log(`🧪 TEST NOTIFICA: ID ${testNotificationId.slice(0, 8)}... programmata per ${testDate.toLocaleTimeString('it-IT')}`);
+        console.log(`✅ TEST programmato: ID ${testNotificationId.slice(0, 8)}...`);
+        console.log(`   📅 Arrivo previsto: ${testDate.toLocaleTimeString('it-IT')}`);
+        console.log(`   🔔 Riceverai la notifica tra 30 secondi!`);
       } catch (error) {
-        console.log(`💥 ERRORE TEST: ${error}`);
+        console.error(`❌ Errore programmazione TEST: ${error}`);
       }
 
       // NOTIFICHE DI RIPASSO NORMALI (1, 3, 7, 21 giorni)
+      console.log('\n📚 Programmando notifiche di ripasso...');
+      
       for (const ripasso of nozione.ripassi) {
         if (ripasso.completato) {
-          console.log(`⏭️ Saltato giorno ${ripasso.giorno}: già completato`);
+          console.log(`⏭️  Giorno ${ripasso.giorno}: già completato, skip`);
+          skippedCount++;
           continue;
         }
 
@@ -148,13 +193,13 @@ export class NotificationService {
         const diffHours = Math.round(diffMs / (1000 * 60 * 60));
         const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-        console.log(`\n📊 Ripasso giorno ${ripasso.giorno}:`);
+        console.log(`\n📊 Giorno ${ripasso.giorno}:`);
         console.log(`   📅 Data: ${dataRipasso.toLocaleString('it-IT')}`);
-        console.log(`   ⏰ Tra: ${diffDays}d ${diffHours}h ${diffMinutes}min`);
+        console.log(`   ⏰ Tra: ${diffDays}g ${diffHours}h ${diffMinutes}min`);
 
         // Salta notifiche nel passato
         if (dataRipasso <= now) {
-          console.log(`   ❌ SALTATO: Nel passato (diff: ${diffMinutes} min)`);
+          console.log(`   ❌ SKIP: nel passato (${diffMinutes} min fa)`);
           skippedCount++;
           continue;
         }
@@ -186,25 +231,26 @@ export class NotificationService {
 
           notificationIds.push(notificationId);
           scheduledCount++;
-          console.log(`   ✅ PROGRAMMATA: ID ${notificationId.slice(0, 8)}...`);
+          console.log(`   ✅ OK: ID ${notificationId.slice(0, 8)}...`);
         } catch (error) {
-          console.log(`   💥 ERRORE: ${error}`);
+          console.error(`   ❌ ERRORE: ${error}`);
         }
       }
 
       // Verifica totale notifiche nel sistema
       const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
       
-      console.log('\n📊 === RIEPILOGO ===');
-      console.log(`🧪 Test (30sec): 1`);
-      console.log(`✅ Programmate: ${scheduledCount}`);
-      console.log(`❌ Saltate: ${skippedCount}`);
-      console.log(`📋 Totale notifiche sistema: ${allScheduled.length}`);
-      console.log('===============================\n');
+      console.log('\n📊 === RIEPILOGO FINALE ===');
+      console.log(`🧪 Test (30 sec):        1`);
+      console.log(`✅ Ripassi programmati:  ${scheduledCount}`);
+      console.log(`❌ Ripassi saltati:      ${skippedCount}`);
+      console.log(`📋 Totale nel sistema:   ${allScheduled.length}`);
+      console.log(`🎯 ID restituiti:        ${notificationIds.length}`);
+      console.log('================================\n');
 
       return notificationIds;
     } catch (error) {
-      console.error('💥 Errore programmazione notifiche:', error);
+      console.error('💥 ERRORE CRITICO nella programmazione:', error);
       return [];
     }
   }
@@ -227,8 +273,10 @@ export class NotificationService {
       for (const id of toCancel) {
         await Notifications.cancelScheduledNotificationAsync(id);
       }
+      
+      console.log(`✅ Notifiche cancellate`);
     } catch (error) {
-      console.error('Errore cancellazione notifiche:', error);
+      console.error('❌ Errore cancellazione notifiche:', error);
     }
   }
 
@@ -255,8 +303,10 @@ export class NotificationService {
       for (const id of toCancelIds) {
         await Notifications.cancelScheduledNotificationAsync(id);
       }
+      
+      console.log(`✅ Notifica aggiornata`);
     } catch (error) {
-      console.error('Errore aggiornamento notifiche:', error);
+      console.error('❌ Errore aggiornamento notifiche:', error);
     }
   }
 
@@ -268,7 +318,7 @@ export class NotificationService {
       await Notifications.cancelAllScheduledNotificationsAsync();
       console.log('🧹 Tutte le notifiche cancellate');
     } catch (error) {
-      console.error('Errore cancellazione tutte notifiche:', error);
+      console.error('❌ Errore cancellazione tutte notifiche:', error);
     }
   }
 
@@ -277,9 +327,11 @@ export class NotificationService {
    */
   async getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
     try {
-      return await Notifications.getAllScheduledNotificationsAsync();
+      const notifications = await Notifications.getAllScheduledNotificationsAsync();
+      console.log(`📋 Notifiche in sistema: ${notifications.length}`);
+      return notifications;
     } catch (error) {
-      console.error('Errore recupero notifiche:', error);
+      console.error('❌ Errore recupero notifiche:', error);
       return [];
     }
   }
@@ -292,7 +344,7 @@ export class NotificationService {
       ? domanda.substring(0, 47) + '...'
       : domanda;
 
-    return `È il momento di ripassare: "${shortDomanda}"`;
+    return `${shortDomanda}`;
   }
 
   /**
@@ -315,18 +367,22 @@ export class NotificationService {
 
   /**
    * Verifica se le notifiche sono abilitate
+   * 🔧 FIX: Questo metodo è ora chiamato SEMPRE prima di programmare
    */
   async areNotificationsEnabled(): Promise<boolean> {
     try {
       const { status } = await Notifications.getPermissionsAsync();
-      return status === 'granted';
+      const enabled = status === 'granted';
+      // Log rimosso per non intasare i log
+      return enabled;
     } catch (error) {
+      console.error('❌ Errore verifica permessi:', error);
       return false;
     }
   }
 
   /**
-   * Mostra notifica immediata per test (solo se necessario)
+   * Mostra notifica immediata per test
    */
   async showTestNotification(): Promise<void> {
     if (!this.isInitialized) {
@@ -340,6 +396,16 @@ export class NotificationService {
       },
       trigger: null, // Immediata
     });
+    
+    console.log('🧪 Notifica di test immediata inviata');
+  }
+
+  /**
+   * Reset del servizio (per gestione stato)
+   */
+  reset(): void {
+    this.isInitialized = false;
+    console.log('🔄 NotificationService resettato');
   }
 
   /**
@@ -354,12 +420,20 @@ export class NotificationService {
       const { status } = await Notifications.getPermissionsAsync();
       const scheduled = await Notifications.getAllScheduledNotificationsAsync();
       
-      return {
+      const info = {
         permissions: status,
         scheduledCount: scheduled.length,
         initialized: this.isInitialized,
       };
+      
+      console.log('\n📊 DEBUG INFO:');
+      console.log(`   Permessi: ${info.permissions}`);
+      console.log(`   Notifiche: ${info.scheduledCount}`);
+      console.log(`   Inizializzato: ${info.initialized}`);
+      
+      return info;
     } catch (error) {
+      console.error('❌ Errore getDebugInfo:', error);
       return {
         permissions: 'error',
         scheduledCount: 0,

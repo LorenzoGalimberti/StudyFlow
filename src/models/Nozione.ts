@@ -426,4 +426,65 @@ export class NozioneModel {
       totalImages: nozioni.reduce((sum, n) => sum + (n.images?.length || 0), 0),
     };
   }
+  /**
+   * 🔔 Riprogramma le notifiche per tutte le nozioni dell'utente
+   * Chiamato al login dopo reinstallazione
+   */
+  async reprogramAllNotifications(userId: string): Promise<{
+    success: number;
+    errors: number;
+    total: number;
+  }> {
+    try {
+      console.log('\n🔄 === RIPROGRAMMAZIONE NOTIFICHE AL LOGIN ===');
+      console.log(`👤 User ID: ${userId.slice(0, 8)}...`);
+      
+      // Cancella tutte le notifiche esistenti per evitare duplicati
+      await this.notificationService.cancelAllNotifications();
+      console.log('🧹 Notifiche esistenti cancellate');
+      
+      // Carica tutte le nozioni
+      const nozioni = await this.getAll(userId);
+      console.log(`📚 Trovate ${nozioni.length} nozioni totali`);
+      
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // Riprogramma per ogni nozione NON completata
+      for (const nozione of nozioni) {
+        if (nozione.completato) {
+          console.log(`⏭️  Skip: "${nozione.domanda.slice(0, 30)}..." (completata)`);
+          continue;
+        }
+        
+        try {
+          const notificationIds = await this.notificationService.scheduleNotificationsForNozione(nozione);
+          
+          if (notificationIds.length > 0) {
+            successCount++;
+            console.log(`✅ "${nozione.domanda.slice(0, 30)}...": ${notificationIds.length} notifiche`);
+          } else {
+            errorCount++;
+            console.warn(`⚠️  "${nozione.domanda.slice(0, 30)}...": 0 notifiche`);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Errore per "${nozione.domanda.slice(0, 30)}...":`, error);
+        }
+      }
+      
+      console.log('\n📊 === RISULTATO RIPROGRAMMAZIONE ===');
+      console.log(`✅ Successo: ${successCount} nozioni`);
+      console.log(`❌ Errori: ${errorCount} nozioni`);
+      console.log(`📋 Totale: ${nozioni.length} nozioni`);
+      console.log(`⏭️  Skippate: ${nozioni.filter(n => n.completato).length} (completate)`);
+      console.log('==========================================\n');
+      
+      return { success: successCount, errors: errorCount, total: nozioni.length };
+      
+    } catch (error) {
+      console.error('❌ ERRORE CRITICO riprogrammazione:', error);
+      throw error;
+    }
+  }
 }
